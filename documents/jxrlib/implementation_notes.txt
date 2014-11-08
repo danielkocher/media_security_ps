@@ -1,0 +1,17 @@
+Funktion transformMacroblock(CWMImageStrCodec * pSC) in strFwdTransform.c
+	Fuehrt erste und zweite Stage der Transformation durch.
+
+	Erste Stage laut Skriptum:
+		Transformation auf alle 4x4 Pixel Bloecke eines Macroblocks anwenden.
+		Die resultierenden Koeffizienten sind partitioniert in 240 "high pass (HP)" Koeffizienten
+		und 16 Koeffizienten, die die "lowest frequency" in jedem Block repraesentieren - aggregiert
+		zu einem quadratischen Block mit 4x4 Koeffizienten.
+
+	Zweite Stage laut Skriptum:
+		Dieser 4x4 low frequency Koeffizientenblock wird abermals tranformiert.
+		Das Resultat sind 15 "low pass (LP)" Koeffizienten und ein einzelner DC Koeffizient (pro Macroblock).
+
+	Damit ergeben sich 3 Scalability Layer: HP, LP und DC.
+
+Funktion processMacroblock(CWMImageStrCodec *pSC) in strenc.c
+	Verarbeitet einen ganzen Macroblock.
