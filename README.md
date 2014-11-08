@@ -1,5 +1,6 @@
 # Media Security PS
 
+## Directories
 * /documents:
   * contains documents concerning jxrlib (almost exclusively own notes as there exists no proper documentation) and the ITU-T reference implementation T.835.
 * /jpegxr_libraries:
