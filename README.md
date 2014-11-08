@@ -7,3 +7,5 @@
   * contains snapshots of both libraries without modifications as zip files.
 * /pictures
   * contains the test pictures (original as well as JPEG-XR format)
+* /double_compression_detection
+ * contains the implementation of the actual double compression detection using the ITU-T JPEG-XR reference implementation by now (may be changed to jxrlib)
