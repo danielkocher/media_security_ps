@@ -9,3 +9,12 @@
   * contains the test pictures (original as well as JPEG-XR format)
 * /double_compression_detection
  * contains the implementation of the actual double compression detection using the ITU-T JPEG-XR reference implementation by now (may be changed to jxrlib)
+
+## Coding style
+* All modifications to the T.835 are documented by a comment of the form 
+  ```C
+  /**
+   * MS_PS:
+   * <description>
+   */
+  ```
