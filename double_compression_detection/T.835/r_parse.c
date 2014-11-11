@@ -1977,6 +1977,19 @@ int _jxr_r_MB_HP(jxr_image_t image, struct rbitstream*str,
         image->model_hp.state[0], image->model_hp.state[1]);
 
     DEBUG(" MB_HP DONE tile=[%u %u] mb=[%u %u]\n", tx, ty, mx, my);
+
+    /** ADDED MS_PS */
+    int blk = 1;
+    for(idx = 16; idx < 256; idx++) {
+      if(idx % 16 == 0) {
+        printf("\nHP block %d: ", blk);
+        ++blk;
+      }
+
+      printf("%d ", (int)MACROBLK_CUR_HP(image, 0, tx, mx, blk, idx));
+    }
+    printf("\n");
+    
     return 0;
 }
 

@@ -2147,7 +2147,7 @@ static void scale_and_emit_top(jxr_image_t image, int tx, int use_my)
             for (jdx = 0 ; jdx < count ; jdx += 1) {
                 if (jdx%8 == 0 && jdx != 0)
                     DEBUG("\n%*s", 29, "");
-                DEBUG(" %08x", image->strip[ch].up3[idx].data[jdx]);
+                DEBUG(" %d", image->strip[ch].up3[idx].data[jdx]);
             }
             DEBUG("\n");
         }
