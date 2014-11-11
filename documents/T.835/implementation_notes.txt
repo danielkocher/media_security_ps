@@ -1,0 +1,22 @@
+Coefficient extraction:
+=======================
+
+Macros MACROBLK_CUR_DC, MACROBLK_CUR_LP and MACROBLK_CUR_HP (see T.835/jxr_priv.h).
+MACROBLK_CUR_DC returns the l-value of the DC coefficient in the macroblock.
+
+MACROBLK_CUR_LP returns the l-value of the LP coefficients in the macroblock.
+k can range from 0 to 14 (= 15 LP coefficients).
+
+MACROBLK_CUR_HP returns the l-value of the HP coefficients in the macroblock.
+blk can range from 0 to 15 (block identification within the macroblock).
+k can range from 0 to 14 (coefficient within the block).
+16 * 15 = 240 HP coefficients.
+
+struct jxr_image (see T.835/jxr_priv.h) contains the actual coefficients. Let 'image' be an instantiation of this struct.
+While en-/decoding the image the coefficients of the current processed macroblock and the i-th strip are stored in image.strip[i].data.
+image.strip[i].data holds 256 coefficients:
+ - index 0 represents the DC coefficient (1)
+ - indices 1 - 15 represent the LP coefficients (15)
+ - indices 16 - 255 represent the HP coefficient (240)
+
+ r_strip.c: in lines 2145 to 2152 the coefficients of a row of macroblocks are printed to stdout at the end of the decode process. Possible coefficient extraction point?!
