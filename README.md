@@ -11,4 +11,4 @@
  * contains the implementation of the actual double compression detection using the ITU-T JPEG-XR reference implementation by now (may be changed to jxrlib)
 
 ## Coding style
-* All modifications to the T.835 are documented by a comment
+* All modifications to the T.835 reference implementation are documented by a comment
