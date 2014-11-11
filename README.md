@@ -12,7 +12,7 @@
 
 ## Coding style
 * All modifications to the T.835 are documented by a comment of the form 
-  ```
+  ```c
   /**
    * MS_PS:
    * <description>
