@@ -1979,16 +1979,27 @@ int _jxr_r_MB_HP(jxr_image_t image, struct rbitstream*str,
     DEBUG(" MB_HP DONE tile=[%u %u] mb=[%u %u]\n", tx, ty, mx, my);
 
     /** ADDED MS_PS */
-    int blk = 1;
-    for(idx = 16; idx < 256; idx++) {
-      if(idx % 16 == 0) {
-        printf("\nHP block %d: ", blk);
-        ++blk;
-      }
+    FILE *f = fopen("coeffs.csv", "a+");
+    if(f != NULL) {
+    	fprintf(f, "%d,%d,%d,%d,%d,", tx, ty, mx, my, (int)MACROBLK_CUR_DC(image, 0, tx, mx));
+    
+	    for(idx = 1; idx < 16; ++idx) {
+	    	fprintf(f, "%d,", (int)MACROBLK_CUR_LP(image, 0, tx, mx, idx));
+	    }
 
-      printf("%d ", (int)MACROBLK_CUR_HP(image, 0, tx, mx, blk, idx));
+	    int blk = 1;
+	    for(idx = 16; idx < 255; ++idx) {
+	      if(idx % 16 == 0) {
+	        //printf("\nHP block %d: ", blk);
+	        ++blk;
+	      }
+
+	      fprintf(f, "%d,", (int)MACROBLK_CUR_HP(image, 0, tx, mx, blk, idx));
+	    }
+	    fprintf(f, "%d\n", (int)MACROBLK_CUR_HP(image, 0, tx, mx, blk, 255));
     }
-    printf("\n");
+
+    fclose(f);
     
     return 0;
 }
