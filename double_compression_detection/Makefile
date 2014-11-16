@@ -3,6 +3,7 @@ CFLAGS		= -Wall -O3
 
 LIB_DIR		= T.835
 
+COEFF_FILE	= coeffs.csv
 OBJECTS		= main.o
 PROGRAMS	= main
 
@@ -16,6 +17,7 @@ main.o: main.c
 	$(CC) $(CFLAGS) -c main.c
 
 main: main.o
+	rm -f $(COEFF_FILE)
 	$(CC) -o $@ $^
 	
 subdefault:
@@ -28,4 +30,4 @@ subclean:
 	$(MAKE) -C $(LIB_DIR) clean
 
 clean: subclean
-	rm -f $(OBJECTS) $(PROGRAMS)
+	rm -f $(OBJECTS) $(PROGRAMS) $(COEFF_FILE)
