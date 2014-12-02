@@ -1979,24 +1979,39 @@ int _jxr_r_MB_HP(jxr_image_t image, struct rbitstream*str,
     DEBUG(" MB_HP DONE tile=[%u %u] mb=[%u %u]\n", tx, ty, mx, my);
 
     /** ADDED MS_PS */
+    // modify DC coefficient
+    //MACROBLK_CUR_DC(image, 0, tx, mx) = 1000;
+
+    // modify LP coefficients
+    /*
+    for(idx = 0; idx < 15; ++idx)
+      MACROBLK_CUR_LP(image, 0, tx, mx, idx) = -1000;
+    */
+    /*
+    // modify HP coefficients
+    int idx2;
+    for(idx = 0; idx < 16; ++idx)
+      for(idx2 = 0; idx2 < 15; ++idx2)
+        MACROBLK_CUR_HP(image, 0, tx, mx, idx, idx2) = 10;
+    */
+
     FILE *f = fopen("coeffs.csv", "a+");
     if(f != NULL) {
     	fprintf(f, "%d,%d,%d,%d,%d,", tx, ty, mx, my, (int)MACROBLK_CUR_DC(image, 0, tx, mx));
     
-	    for(idx = 1; idx < 16; ++idx) {
+	    for(idx = 0; idx < 15; ++idx) {
 	    	fprintf(f, "%d,", (int)MACROBLK_CUR_LP(image, 0, tx, mx, idx));
 	    }
 
-	    int blk = 1;
-	    for(idx = 16; idx < 255; ++idx) {
-	      if(idx % 16 == 0) {
-	        //printf("\nHP block %d: ", blk);
-	        ++blk;
-	      }
-
-	      fprintf(f, "%d,", (int)MACROBLK_CUR_HP(image, 0, tx, mx, blk, idx));
-	    }
-	    fprintf(f, "%d\n", (int)MACROBLK_CUR_HP(image, 0, tx, mx, blk, 255));
+      int blk = 0;
+      for(blk = 0; blk < 16; ++blk) {
+        for(idx = 0; idx < 15; ++idx) {
+          if(blk == 15 && idx == 14)
+            fprintf(f, "%d\n", (int)MACROBLK_CUR_HP(image, 0, tx, mx, blk, idx));
+          else
+            fprintf(f, "%d,", (int)MACROBLK_CUR_HP(image, 0, tx, mx, blk, idx));
+        }
+      }
     }
 
     fclose(f);
