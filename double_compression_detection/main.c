@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <assert.h>
 #include <unistd.h>
+#include <limits.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -21,12 +22,27 @@ struct coeff_line {
 	int hp_coeff[NUM_HP_COEFFS];
 };
 
+struct hist_data {
+	int val;
+	int count;
+};
+
 struct coeff_line *parse_coeff_line(FILE *f);
+void free_coeffs(struct coeff_line **coeffs, int num_line);
+void update_min_max(int *current, int *min, int *max);
+void insert_hist_data(struct hist_data *hist, int *hist_size, int *hist_pos, int val);
+int search_hist_data(struct hist_data *hist, int *hist_pos, int val);
 
 int main(int argc, char** argv) {
+	if(argc < 3) {
+		fprintf(stderr, "USAGE: main <input file> <output file>\n");
+		return -1;
+	}
+
 	int ret;
-	char *path_picture = "../pictures/lena512.jxr";
-	char *cmd[] = {"jpegxr", path_picture, (char *)0};
+	char *path_input_file = argv[1];
+	char *path_output_file = argv[2];
+	char *cmd[] = {"jpegxr", "-o", path_output_file, path_input_file, (char *)0};
 	pid_t child_pid;
 	int child_status;
 	int i = 0, j = 0;
@@ -52,9 +68,10 @@ int main(int argc, char** argv) {
 
 	if(f == NULL) {
 		fprintf(stderr, "Could not open file %s.", path_coeff_file);
+		fclose(f);
+		free(coeffs);
 		return -1;
 	}
-	//printf("File %s opened.\n", path_coeff_file);
 
 	while(!feof(f)) {
 		// check for size of array and allocate more if necessary
@@ -66,11 +83,8 @@ int main(int argc, char** argv) {
 		// parse a whole line of coefficients and store pointer
 		*(coeffs + num_line) = parse_coeff_line(f);
 
-		//fprintf(stdout, "Line %d read.\n", num_line);
-
 		++num_line;
 	}
-	//fprintf(stdout, "File %s read.\n", path_coeff_file);
 
 	// resize to minimum size
 	if(num_line < coeffs_size) {
@@ -82,6 +96,11 @@ int main(int argc, char** argv) {
 	// close file if it was opened
 	if(f != NULL)
 		fclose(f);
+
+	int hist_size = num_line;
+	int hist_pos = 0;
+	struct hist_data *hist = calloc(hist_size, sizeof(struct hist_data));
+
 	//fprintf(stdout, "File %s closed.\n", path_coeff_file);
 
 	// debug output of read coefficients in format to execute a diff -u on the original coeffs.csv
@@ -105,6 +124,9 @@ int main(int argc, char** argv) {
 	}
 	*/
 
+	int max = INT_MIN;
+	int min = INT_MAX;
+
 	for(i = 0; i < num_line; ++i) {
 		fprintf(stdout, "TILE:\n\t");
 		for(j = 0; j < NUM_TILE_INFO; ++j)
@@ -117,26 +139,51 @@ int main(int argc, char** argv) {
 		fprintf(stdout, "\n\n");
 
 		fprintf(stdout, "DC:\n\t");
-		for(j = 0; j < NUM_DC_COEFFS; ++j)
+		for(j = 0; j < NUM_DC_COEFFS; ++j) {
+			update_min_max(&coeffs[i]->dc_coeff[j], &min, &max);
 			fprintf(stdout, "%4d ", coeffs[i]->dc_coeff[j]);
+		}
 		fprintf(stdout, "\n\n");
 
 		fprintf(stdout, "LP:\n\t");
 		for(j = 0; j < NUM_LP_COEFFS; ++j) {
+			update_min_max(&coeffs[i]->lp_coeff[j], &min, &max);
+
+			if(j == 0)
+				insert_hist_data(hist, &hist_size, &hist_pos, coeffs[i]->lp_coeff[j]);
+			
 			if((j > 0) && ((j % 8) == 0))
 				fprintf(stdout, "\n\t");
+			
 			fprintf(stdout, "%4d ", coeffs[i]->lp_coeff[j]);
 		}
 		fprintf(stdout, "\n\n");
 
 		fprintf(stdout, "HP:\n\t");
 		for(j = 0; j < NUM_HP_COEFFS; ++j) {
+			update_min_max(&coeffs[i]->hp_coeff[j], &min, &max);
+
 			if((j > 0) && ((j % 8) == 0))
 				fprintf(stdout, "\n\t");
+
 			fprintf(stdout, "%4d ", coeffs[i]->hp_coeff[j]);
 		}
 		fprintf(stdout, "\n\n============================================\n\n");
 	}
+	fprintf(stdout, "min = %4d\nmax = %4d\n", min, max);
+
+	// resize to minimum size
+	if(hist_pos < hist_size) {
+		hist_size = hist_pos;
+		--hist_pos;
+		hist = realloc(hist, hist_size * sizeof(struct hist_data));
+	}
+
+	for(i = 0; i < hist_pos; ++i)
+		fprintf(stdout, "hist[%d].val = %d, hist[%d].count = %d\n", i, hist[i].val, i, hist[i].count);
+
+	free_coeffs(coeffs, num_line);
+	free(hist);
 
 	return 0;
 }
@@ -162,6 +209,7 @@ struct coeff_line *parse_coeff_line(FILE *f) {
 	while(!feof(f)) {
 		// check for errors
 		if(ferror(f)) {
+			free(ret);
 			fprintf(stderr, "Error while reading file.\n");
 			return NULL;
 		}
@@ -205,4 +253,57 @@ struct coeff_line *parse_coeff_line(FILE *f) {
 	}
 
 	return ret;
+}
+
+void free_coeffs(struct coeff_line **coeffs, int num_line) {
+	if(coeffs == NULL)
+		exit(-1);
+
+	int i = 0;
+	for(i = 0; i <= num_line; ++i) {
+		if(coeffs[i] == NULL)
+			exit(-1);
+		
+		free(coeffs[i]);
+	}
+	free(coeffs);
+}
+
+void update_min_max(int *current, int *min, int *max) {
+	if(current == NULL || min == NULL || max == NULL)
+		exit(-1);
+
+	if(*current > *max) {
+		*max = *current;
+		return;
+	}
+	else if(*current < *min) {
+		*min = *current;
+	}
+}
+
+void insert_hist_data(struct hist_data *hist, int *hist_size, int *hist_pos, int val) {
+	if(hist == NULL || hist_size == NULL || hist_pos == NULL)
+		exit(-1);
+
+	int pos = search_hist_data(hist, hist_pos, val);
+	if(pos < 0) {
+		hist[*hist_pos].val = val;
+		hist[*hist_pos].count = 1;
+		++(*hist_pos);
+	} else {
+		++(hist[pos].count);
+	}
+}
+
+int search_hist_data(struct hist_data *hist, int *hist_pos, int val) {
+	if(hist == NULL || hist_pos == NULL)
+		exit(-1);
+
+	int i = 0;
+	for(i = 0; i <= *hist_pos; ++i)
+		if(hist[i].val == val)
+			return i;
+
+	return -1;
 }
