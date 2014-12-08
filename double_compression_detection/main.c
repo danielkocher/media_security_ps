@@ -27,11 +27,29 @@ struct hist_data {
 	int count;
 };
 
+struct hist_alloc_info {
+	int size;
+	int pos;
+};
+
+struct histogram {
+	struct hist_alloc_info info;
+	struct hist_data *data;
+};
+
 struct coeff_line *parse_coeff_line(FILE *f);
 void free_coeffs(struct coeff_line **coeffs, int num_line);
+
 void update_min_max(int *current, int *min, int *max);
-void insert_hist_data(struct hist_data *hist, int *hist_size, int *hist_pos, int val);
-int search_hist_data(struct hist_data *hist, int *hist_pos, int val);
+
+struct histogram *init_histogram(int num_coeffs, int num_values);
+struct hist_data *init_hist_data(struct hist_alloc_info *info);
+void free_histogram(struct histogram *hist, int num_coeffs);
+
+void insert_hist_data(struct histogram *hist, int *idx_coeff, int *val);
+int search_hist_data(struct histogram *hist, int *idx_coeff, int *val);
+
+int compare(const void *p, const void *q);
 
 int main(int argc, char** argv) {
 	if(argc < 3) {
@@ -97,35 +115,12 @@ int main(int argc, char** argv) {
 	if(f != NULL)
 		fclose(f);
 
-	int hist_size = num_line;
-	int hist_pos = 0;
-	struct hist_data *hist = calloc(hist_size, sizeof(struct hist_data));
+	// number of coefficients
+	int num_coeffs = NUM_LP_COEFFS;
+	// at least one value present
+	int num_values = 1;		
 
-	//fprintf(stdout, "File %s closed.\n", path_coeff_file);
-
-	// debug output of read coefficients in format to execute a diff -u on the original coeffs.csv
-	/*
-	for(i = 0; i < num_line; ++i) {
-		for(j = 0; j < NUM_TILE_INFO; ++j)
-			fprintf(stdout, "%d,", coeffs[i]->tile_info[j]);
-
-		for(j = 0; j < NUM_MB_INFO; ++j)
-			fprintf(stdout, "%d,", coeffs[i]->mb_info[j]);
-
-		for(j = 0; j < NUM_DC_COEFFS; ++j)
-			fprintf(stdout, "%d,", coeffs[i]->dc_coeff[j]);
-
-		for(j = 0; j < NUM_LP_COEFFS; ++j)
-			fprintf(stdout, "%d,", coeffs[i]->lp_coeff[j]);
-
-		for(j = 0; j < (NUM_HP_COEFFS - 1); ++j)
-			fprintf(stdout, "%d,", coeffs[i]->hp_coeff[j]);
-		fprintf(stdout, "%d\n", coeffs[i]->hp_coeff[(NUM_HP_COEFFS - 1)]);
-	}
-	*/
-
-	int max = INT_MIN;
-	int min = INT_MAX;
+	struct histogram *hist = init_histogram(num_coeffs, num_values);
 
 	for(i = 0; i < num_line; ++i) {
 		fprintf(stdout, "TILE:\n\t");
@@ -139,18 +134,14 @@ int main(int argc, char** argv) {
 		fprintf(stdout, "\n\n");
 
 		fprintf(stdout, "DC:\n\t");
-		for(j = 0; j < NUM_DC_COEFFS; ++j) {
-			update_min_max(&coeffs[i]->dc_coeff[j], &min, &max);
+		for(j = 0; j < NUM_DC_COEFFS; ++j)
 			fprintf(stdout, "%4d ", coeffs[i]->dc_coeff[j]);
-		}
 		fprintf(stdout, "\n\n");
 
 		fprintf(stdout, "LP:\n\t");
 		for(j = 0; j < NUM_LP_COEFFS; ++j) {
-			update_min_max(&coeffs[i]->lp_coeff[j], &min, &max);
-
-			if(j == 0)
-				insert_hist_data(hist, &hist_size, &hist_pos, coeffs[i]->lp_coeff[j]);
+			if(coeffs[i]->tile_info[0] == 0 && coeffs[i]->tile_info[1] == 0)
+				insert_hist_data(hist, &j, &coeffs[i]->lp_coeff[j]);
 			
 			if((j > 0) && ((j % 8) == 0))
 				fprintf(stdout, "\n\t");
@@ -161,8 +152,6 @@ int main(int argc, char** argv) {
 
 		fprintf(stdout, "HP:\n\t");
 		for(j = 0; j < NUM_HP_COEFFS; ++j) {
-			update_min_max(&coeffs[i]->hp_coeff[j], &min, &max);
-
 			if((j > 0) && ((j % 8) == 0))
 				fprintf(stdout, "\n\t");
 
@@ -170,20 +159,18 @@ int main(int argc, char** argv) {
 		}
 		fprintf(stdout, "\n\n============================================\n\n");
 	}
-	fprintf(stdout, "min = %4d\nmax = %4d\n", min, max);
 
-	// resize to minimum size
-	if(hist_pos < hist_size) {
-		hist_size = hist_pos;
-		--hist_pos;
-		hist = realloc(hist, hist_size * sizeof(struct hist_data));
-	}
+	f = fopen("hist.dat", "a+");
+	for(i = 0; i < NUM_LP_COEFFS; ++i)
+		qsort(hist[i].data, hist[i].info.size, sizeof(struct hist_data), compare);
 
-	for(i = 0; i < hist_pos; ++i)
-		fprintf(stdout, "hist[%d].val = %d, hist[%d].count = %d\n", i, hist[i].val, i, hist[i].count);
+	j = 0;
+	for(i = 0; i < hist[j].info.size; ++i)
+		fprintf(f, "%d %d\n", hist[j].data[i].val, hist[j].data[i].count);
+	fclose(f);
 
 	free_coeffs(coeffs, num_line);
-	free(hist);
+	free_histogram(hist, num_coeffs);
 
 	return 0;
 }
@@ -282,28 +269,95 @@ void update_min_max(int *current, int *min, int *max) {
 	}
 }
 
-void insert_hist_data(struct hist_data *hist, int *hist_size, int *hist_pos, int val) {
-	if(hist == NULL || hist_size == NULL || hist_pos == NULL)
-		exit(-1);
+struct histogram *init_histogram(int num_coeffs, int num_values) {
+	struct histogram *hist = calloc(num_coeffs, sizeof(struct histogram));
 
-	int pos = search_hist_data(hist, hist_pos, val);
+	if(hist == NULL)
+		return NULL;
+
+	int i = 0;
+	for(i = 0; i < num_coeffs; ++i) {
+		hist[i].info.size = num_values;
+		hist[i].info.pos = 0;
+
+		hist[i].data = calloc(hist->info.size, sizeof(struct hist_data));
+
+		if(hist[i].data == NULL)
+			return NULL;
+
+		hist[i].data->val = 0;
+		hist[i].data->count = 0;
+	}
+
+	return hist;
+}
+
+void free_histogram(struct histogram *hist, int num_coeffs) {
+	if(hist == NULL)
+		return;
+
+	int i = 0;
+	for(i = 0; i < num_coeffs; ++i)
+		free(hist[i].data);
+
+	free(hist);
+}
+
+void insert_hist_data(struct histogram *hist, int *idx_coeff, int *val) {
+	if(hist == NULL || idx_coeff == NULL || val == NULL) {
+		fprintf(stderr, "Error in insert_hist_data.\n");
+		exit(-1);
+	}
+
+	if(*idx_coeff > NUM_LP_COEFFS) {
+		fprintf(stderr, "Error in insert_hist_data: num_coeff too big (%d).\n", *idx_coeff);
+		exit(-1);
+	}
+
+	int pos = search_hist_data(hist, idx_coeff, val);
 	if(pos < 0) {
-		hist[*hist_pos].val = val;
-		hist[*hist_pos].count = 1;
-		++(*hist_pos);
+		if((hist[*idx_coeff].info.size - 1) <= hist[*idx_coeff].info.pos) {
+			hist[*idx_coeff].info.size *= 2;
+			hist[*idx_coeff].data = realloc(hist[*idx_coeff].data, hist[*idx_coeff].info.size * sizeof(struct hist_data));
+
+			if(hist[*idx_coeff].data == NULL) {
+				fprintf(stderr, "Error while reallocing histogram data to size %d.\n", hist[*idx_coeff].info.pos);
+				exit(-1);
+			}
+
+			int i = 0;
+			for(i = (hist[*idx_coeff].info.pos + 1); i < hist[*idx_coeff].info.size; ++i) {
+				hist[*idx_coeff].data[i].val = 0;
+				hist[*idx_coeff].data[i].count = 0;
+			}
+		}
+		
+		hist[*idx_coeff].data[hist[*idx_coeff].info.pos].val = *val;
+		hist[*idx_coeff].data[hist[*idx_coeff].info.pos].count = 1;
+		++(hist[*idx_coeff].info.pos);
 	} else {
-		++(hist[pos].count);
+		++(hist[*idx_coeff].data[pos].count);
 	}
 }
 
-int search_hist_data(struct hist_data *hist, int *hist_pos, int val) {
-	if(hist == NULL || hist_pos == NULL)
+
+int search_hist_data(struct histogram *hist, int *idx_coeff, int *val) {
+	if(hist == NULL || idx_coeff == NULL || val == NULL) {
+		fprintf(stderr, "Error in search_hist_data.\n");
 		exit(-1);
+	}
 
 	int i = 0;
-	for(i = 0; i <= *hist_pos; ++i)
-		if(hist[i].val == val)
+	for(i = 0; i <= hist[*idx_coeff].info.pos; ++i)
+		if(hist[*idx_coeff].data[i].val == *val)
 			return i;
 
 	return -1;
+}
+
+int compare(const void *p, const void *q) {
+	struct hist_data *sp = ((struct hist_data *)p);
+	struct hist_data *sq = ((struct hist_data *)q);
+
+	return (sp->val > sq->val);
 }
