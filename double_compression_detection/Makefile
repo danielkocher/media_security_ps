@@ -17,7 +17,6 @@ main.o: main.c
 	$(CC) $(CFLAGS) -c main.c
 
 main: main.o
-	rm -f $(COEFF_FILE)
 	$(CC) -o $@ $^
 	
 subdefault:
