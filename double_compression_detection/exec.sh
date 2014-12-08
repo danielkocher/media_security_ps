@@ -1,7 +1,6 @@
 #!/bin/bash
 
-#clean up
-rm -i coeffs.csv hist*.dat
+sh cleanup.sh
 
 #make
 make
