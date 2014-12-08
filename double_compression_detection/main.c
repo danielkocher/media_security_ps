@@ -66,7 +66,6 @@ int main(int argc, char** argv) {
 	int i = 0, j = 0;
 
 	child_pid = fork();
-
 	if(child_pid == 0) {
 		ret = execv("T.835/jpegxr", cmd);
 		return ret; // should never be reached
@@ -122,6 +121,8 @@ int main(int argc, char** argv) {
 
 	struct histogram *hist = init_histogram(num_coeffs, num_values);
 
+	/*
+	// debug
 	for(i = 0; i < num_line; ++i) {
 		fprintf(stdout, "TILE:\n\t");
 		for(j = 0; j < NUM_TILE_INFO; ++j)
@@ -140,8 +141,7 @@ int main(int argc, char** argv) {
 
 		fprintf(stdout, "LP:\n\t");
 		for(j = 0; j < NUM_LP_COEFFS; ++j) {
-			if(coeffs[i]->tile_info[0] == 0 && coeffs[i]->tile_info[1] == 0)
-				insert_hist_data(hist, &j, &coeffs[i]->lp_coeff[j]);
+			insert_hist_data(hist, &j, &coeffs[i]->lp_coeff[j]);
 			
 			if((j > 0) && ((j % 8) == 0))
 				fprintf(stdout, "\n\t");
@@ -159,15 +159,39 @@ int main(int argc, char** argv) {
 		}
 		fprintf(stdout, "\n\n============================================\n\n");
 	}
+	*/
 
-	f = fopen("hist.dat", "a+");
+	for(i = 0; i < num_line; ++i)
+		for(j = 0; j < NUM_LP_COEFFS; ++j)
+			insert_hist_data(hist, &j, &coeffs[i]->lp_coeff[j]);
+
+	// resize to minimum size
+	for(i = 0; i < NUM_LP_COEFFS; ++i) {
+		if(hist[i].info.pos < hist[i].info.size) {
+			hist[i].info.size = hist[i].info.pos;
+			--hist[i].info.pos;
+			hist[i].data = realloc(hist[i].data, hist[i].info.size * sizeof(struct hist_data *));
+		}
+	}
+
+	// sort coefficients
 	for(i = 0; i < NUM_LP_COEFFS; ++i)
 		qsort(hist[i].data, hist[i].info.size, sizeof(struct hist_data), compare);
 
-	j = 0;
-	for(i = 0; i < hist[j].info.size; ++i)
-		fprintf(f, "%d %d\n", hist[j].data[i].val, hist[j].data[i].count);
-	fclose(f);
+	char **fns = calloc(NUM_LP_COEFFS, sizeof(char *));
+	for(i = 0; i < NUM_LP_COEFFS; ++i) {
+		char *fn = calloc((strlen("hist.dat") + 3), sizeof(char));
+
+		snprintf(fn, (strlen("hist.dat") + 3), "hist%d.dat", i);
+		//fprintf(stdout, "Filename: %s\n", fn);
+		
+		f = fopen(fn, "a+");
+
+		for(j = 0; j < hist[i].info.size; ++j)
+			fprintf(f, "%d %d\n", hist[i].data[j].val, hist[i].data[j].count);
+		fclose(f);
+		fns[i] = fn;
+	}
 
 	free_coeffs(coeffs, num_line);
 	free_histogram(hist, num_coeffs);
@@ -315,6 +339,10 @@ void insert_hist_data(struct histogram *hist, int *idx_coeff, int *val) {
 	}
 
 	int pos = search_hist_data(hist, idx_coeff, val);
+	
+	//if(*idx_coeff == 0)
+	//	fprintf(stdout, "*val == %d && pos == %d\n", *val, pos);
+
 	if(pos < 0) {
 		if((hist[*idx_coeff].info.size - 1) <= hist[*idx_coeff].info.pos) {
 			hist[*idx_coeff].info.size *= 2;
@@ -348,9 +376,13 @@ int search_hist_data(struct histogram *hist, int *idx_coeff, int *val) {
 	}
 
 	int i = 0;
-	for(i = 0; i <= hist[*idx_coeff].info.pos; ++i)
-		if(hist[*idx_coeff].data[i].val == *val)
+	for(i = 0; i <= hist[*idx_coeff].info.pos; ++i) {
+		//if(*idx_coeff == 0)
+		//	fprintf(stdout, "hist[%d].data[%d].count = %d, .val = %d\n", *idx_coeff, i, hist[*idx_coeff].data[i].count, hist[*idx_coeff].data[i].val);
+
+		if(hist[*idx_coeff].data[i].count > 0 && hist[*idx_coeff].data[i].val == *val)
 			return i;
+	}
 
 	return -1;
 }
