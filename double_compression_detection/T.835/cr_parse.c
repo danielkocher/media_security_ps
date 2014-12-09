@@ -1234,7 +1234,7 @@ static int read_ifd(jxr_container_t container, FILE*fd, int image_number, uint32
             DEBUG("Container %d: tag 0x%04x BYTE:", image_number, cur[idx].tag);
             if (cur[idx].cnt > 4) {
                 ifd_off = bytes4_to_off(cur[idx].value_.v_byte);
-                assert((ifd_off & 1) == 0);
+                //assert((ifd_off & 1) == 0);
                 fseek(fd, ifd_off, SEEK_SET);
                 cur[idx].value_.p_byte = (uint8_t*)malloc(cur[idx].cnt);
                 fread(cur[idx].value_.p_byte, 1, cur[idx].cnt, fd);
