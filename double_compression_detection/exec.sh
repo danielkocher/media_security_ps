@@ -6,7 +6,7 @@ sh cleanup.sh
 make
 
 #execute
-./main ../pictures/lena512.jxr lena512.tif
+./main ../pictures/mandrill_4.2.03.jxr mandrill_4.2.03.tif
 
 #histograms
 for file in ./hist*.dat ; do
