@@ -7,389 +7,273 @@
 #include <limits.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <dirent.h>
 
-#define NUM_DC_COEFFS 1
-#define NUM_LP_COEFFS 15
-#define NUM_HP_COEFFS 240
-#define NUM_TILE_INFO 2
-#define NUM_MB_INFO 2
+#include "histogram.h"
+#include "coeffio.h"
 
-struct coeff_line {
-	int tile_info[NUM_TILE_INFO];
-	int mb_info[NUM_MB_INFO];
-	int dc_coeff[NUM_DC_COEFFS];
-	int lp_coeff[NUM_LP_COEFFS];
-	int hp_coeff[NUM_HP_COEFFS];
-};
-
-struct hist_data {
-	int val;
+struct dynamic_string_array {
+	int allocated;
 	int count;
+	char **strings;
 };
 
-struct hist_alloc_info {
-	int size;
-	int pos;
-};
-
-struct histogram {
-	struct hist_alloc_info info;
-	struct hist_data *data;
-};
-
-struct coeff_line *parse_coeff_line(FILE *f);
-void free_coeffs(struct coeff_line **coeffs, int num_line);
-
-void update_min_max(int *current, int *min, int *max);
-
-struct histogram *init_histogram(int num_coeffs, int num_values);
-struct hist_data *init_hist_data(struct hist_alloc_info *info);
-void free_histogram(struct histogram *hist, int num_coeffs);
-
-void insert_hist_data(struct histogram *hist, int *idx_coeff, int *val);
-int search_hist_data(struct histogram *hist, int *idx_coeff, int *val);
-
-int compare(const void *p, const void *q);
+void list_directory(struct dynamic_string_array *dsa, const char *directory_name);
+void cleanup(pid_t *pids_children, struct dynamic_string_array *dsa);
 
 int main(int argc, char** argv) {
-	if(argc < 3) {
-		fprintf(stderr, "USAGE: main <input file> <output file>\n");
-		return -1;
-	}
+	struct dynamic_string_array *dsa = calloc(1, sizeof(struct dynamic_string_array));
+	int i = 0, j = 0, k = 0;
 
-	int ret;
-	char *path_input_file = argv[1];
-	char *path_output_file = argv[2];
-	char *cmd[] = {"jpegxr", "-o", path_output_file, path_input_file, (char *)0};
-	pid_t child_pid;
-	int child_status;
-	int i = 0, j = 0;
+	dsa->allocated = 1;
+	dsa->count = 0;
+	dsa->strings = calloc(dsa->allocated, sizeof(char *));
 
-	child_pid = fork();
-	if(child_pid == 0) {
-		ret = execv("T.835/jpegxr", cmd);
-		return ret; // should never be reached
-	} else {
-		pid_t term_pid;
-		do {
-			term_pid = wait(&child_status);
-		}while(term_pid != child_pid);
-	}
+	list_directory(dsa, "./test_images");
 
-	const char *path_coeff_file = "coeffs.csv";
-	FILE *f = fopen(path_coeff_file, "r");
+	int num_of_children = dsa->count;
+	fprintf(stdout, "Creating %d example child processes.\n", num_of_children);
 
-	int coeffs_size = 100;
-	struct coeff_line **coeffs = calloc(coeffs_size, sizeof(struct coeff_line *));
-	int num_line = 0;
+	pid_t *pids_children = NULL;
+	pid_t pid_child = -1;
+	pids_children = calloc(num_of_children, sizeof(pid_t));
+	if(pids_children == NULL) {
+		fprintf(stderr, "An error occurred while allocating %d PIDs!\n", num_of_children);
 
-	if(f == NULL) {
-		fprintf(stderr, "Could not open file %s.", path_coeff_file);
-		fclose(f);
-		free(coeffs);
-		return -1;
-	}
-
-	while(!feof(f)) {
-		// check for size of array and allocate more if necessary
-		if(num_line >= (coeffs_size - 1)) {
-			coeffs_size *= 2;
-			coeffs = realloc(coeffs, coeffs_size * sizeof(struct coeff_line *));
-		}
-
-		// parse a whole line of coefficients and store pointer
-		*(coeffs + num_line) = parse_coeff_line(f);
-
-		++num_line;
-	}
-
-	// resize to minimum size
-	if(num_line < coeffs_size) {
-		coeffs_size = num_line;
-		--num_line;
-		coeffs = realloc(coeffs, coeffs_size * sizeof(struct coeff_line *));
-	}
-
-	// close file if it was opened
-	if(f != NULL)
-		fclose(f);
-
-	// number of coefficients
-	int num_coeffs = NUM_LP_COEFFS;
-	// at least one value present
-	int num_values = 1;		
-
-	struct histogram *hist = init_histogram(num_coeffs, num_values);
-
-	/*
-	// debug
-	for(i = 0; i < num_line; ++i) {
-		fprintf(stdout, "TILE:\n\t");
-		for(j = 0; j < NUM_TILE_INFO; ++j)
-			fprintf(stdout, "%4d ", coeffs[i]->tile_info[j]);
-		fprintf(stdout, "\n\n");
-
-		fprintf(stdout, "MACROBLOCK:\n\t");
-		for(j = 0; j < NUM_MB_INFO; ++j)
-			fprintf(stdout, "%4d ", coeffs[i]->mb_info[j]);
-		fprintf(stdout, "\n\n");
-
-		fprintf(stdout, "DC:\n\t");
-		for(j = 0; j < NUM_DC_COEFFS; ++j)
-			fprintf(stdout, "%4d ", coeffs[i]->dc_coeff[j]);
-		fprintf(stdout, "\n\n");
-
-		fprintf(stdout, "LP:\n\t");
-		for(j = 0; j < NUM_LP_COEFFS; ++j) {
-			insert_hist_data(hist, &j, &coeffs[i]->lp_coeff[j]);
-			
-			if((j > 0) && ((j % 8) == 0))
-				fprintf(stdout, "\n\t");
-			
-			fprintf(stdout, "%4d ", coeffs[i]->lp_coeff[j]);
-		}
-		fprintf(stdout, "\n\n");
-
-		fprintf(stdout, "HP:\n\t");
-		for(j = 0; j < NUM_HP_COEFFS; ++j) {
-			if((j > 0) && ((j % 8) == 0))
-				fprintf(stdout, "\n\t");
-
-			fprintf(stdout, "%4d ", coeffs[i]->hp_coeff[j]);
-		}
-		fprintf(stdout, "\n\n============================================\n\n");
-	}
-	*/
-
-	for(i = 0; i < num_line; ++i)
-		for(j = 0; j < NUM_LP_COEFFS; ++j)
-			insert_hist_data(hist, &j, &coeffs[i]->lp_coeff[j]);
-
-	// resize to minimum size
-	for(i = 0; i < NUM_LP_COEFFS; ++i) {
-		if(hist[i].info.pos < hist[i].info.size) {
-			hist[i].info.size = hist[i].info.pos;
-			--hist[i].info.pos;
-			hist[i].data = realloc(hist[i].data, hist[i].info.size * sizeof(struct hist_data *));
-		}
-	}
-
-	// sort coefficients
-	for(i = 0; i < NUM_LP_COEFFS; ++i)
-		qsort(hist[i].data, hist[i].info.size, sizeof(struct hist_data), compare);
-
-	char **fns = calloc(NUM_LP_COEFFS, sizeof(char *));
-	for(i = 0; i < NUM_LP_COEFFS; ++i) {
-		char *fn = calloc((strlen("hist.dat") + 3), sizeof(char));
-
-		snprintf(fn, (strlen("hist.dat") + 3), "hist%d.dat", i);
-		//fprintf(stdout, "Filename: %s\n", fn);
+		for(i = 0; i < dsa->count; ++i)
+			if(dsa->strings[i] != NULL)
+				free(dsa->strings[i]);
 		
-		f = fopen(fn, "a+");
+		if(dsa->strings != NULL)
+			free(dsa->strings);
+		if(dsa != NULL)
+			free(dsa);
 
-		for(j = 0; j < hist[i].info.size; ++j)
-			fprintf(f, "%d %d\n", hist[i].data[j].val, hist[i].data[j].count);
-		fclose(f);
-		fns[i] = fn;
+		return (-1);
 	}
 
-	free_coeffs(coeffs, num_line);
-	free_histogram(hist, num_coeffs);
+	char *fn_tif = NULL;
+	i = 0;
+	for(i = 0; i < num_of_children; ++i) {
+		if((pid_child = fork()) == 0) {
+			fn_tif = calloc(1, strlen(dsa->strings[i]) + 1);
+			strncpy(fn_tif, dsa->strings[i], strlen(dsa->strings[i]) + 1);
+			fn_tif[strlen(fn_tif) - 3] = 't';
+			fn_tif[strlen(fn_tif) - 2] = 'i';
+			fn_tif[strlen(fn_tif) - 1] = 'f';
+
+			char *cmd[] = {"jpegxr", "-o", fn_tif, dsa->strings[i], (char *)0};
+			int ret = execv("T.835/jpegxr", cmd);
+
+			if(ret == -1)
+				cleanup(pids_children, dsa);
+
+			return ret;
+		}
+		else {
+			pids_children[i] = pid_child;
+		}
+	}
+
+	int waiting_for_children = 0;
+	do {
+		waiting_for_children = 0;
+		for(i = 0; i < num_of_children; ++i) {
+			if(pids_children[i] > 0) {
+				if(waitpid(pids_children[i], NULL, WNOHANG) != 0) {
+					fprintf(stdout, "Child process %d is done.\n", pids_children[i]);
+					char *last_slash = strrchr(dsa->strings[i], '/');
+					const char *coeffs_fn = "coeffs.csv";
+					char *path_coeff_file = calloc(last_slash - dsa->strings[i] + strlen(coeffs_fn) + 2, sizeof(char));
+
+					if(path_coeff_file == NULL) {
+						fprintf(stderr, "Could not allocate memory for coefficient path.\n");
+						return -1;
+					}
+
+					strncpy(path_coeff_file, dsa->strings[i], last_slash - dsa->strings[i] + 1);
+					strncat(path_coeff_file, coeffs_fn, strlen(coeffs_fn));
+
+					FILE *f = fopen(path_coeff_file, "r");
+
+					int coeffs_size = 100;
+					struct coeff_line **coeffs = calloc(coeffs_size, sizeof(struct coeff_line *));
+					int num_line = 0;
+
+					if(f == NULL) {
+						fprintf(stderr, "Could not open file %s.", path_coeff_file);
+						free(coeffs);
+						return -1;
+					}
+
+					while(!feof(f)) {
+						// check for size of array and allocate more if necessary
+						if(num_line >= (coeffs_size - 1)) {
+							coeffs_size *= 2;
+							coeffs = realloc(coeffs, coeffs_size * sizeof(struct coeff_line *));
+						}
+
+						// parse a whole line of coefficients and store pointer
+						*(coeffs + num_line) = parse_coeff_line(f);
+
+						++num_line;
+					}
+
+					// resize to minimum size
+					if(num_line < coeffs_size) {
+						coeffs_size = num_line;
+						--num_line;
+						coeffs = realloc(coeffs, coeffs_size * sizeof(struct coeff_line *));
+					}
+
+					// close file if it was opened
+					if(f != NULL)
+						fclose(f);
+
+					// number of coefficients
+					int num_coeffs = NUM_LP_COEFFS;
+					// at least one value present
+					int num_values = 1;		
+					struct histogram *hist = init_histogram(num_coeffs, num_values);
+
+					for(j = 0; j < num_line; ++j)
+						for(k = 0; k < NUM_LP_COEFFS; ++k)
+							insert_hist_data(hist, &k, NUM_LP_COEFFS, &coeffs[j]->lp_coeff[k]);
+
+					// resize to minimum size
+					for(j = 0; j < NUM_LP_COEFFS; ++j) {
+						if(hist[j].info.pos < hist[j].info.size) {
+							hist[j].info.size = hist[j].info.pos;
+							--hist[j].info.pos;
+							hist[j].data = realloc(hist[j].data, hist[j].info.size * sizeof(struct hist_data *));
+						}
+					}
+
+					// sort coefficients
+					for(j = 0; j < NUM_LP_COEFFS; ++j)
+						qsort(hist[j].data, hist[j].info.size, sizeof(struct hist_data), compare_hist);
+
+					//char **fns = calloc(NUM_LP_COEFFS, sizeof(char *));
+					for(j = 0; j < NUM_LP_COEFFS; ++j) {
+						char *hist_fn = calloc(strlen("hist.dat") + 3 + 4, sizeof(char));
+						char *path_hist_file = calloc(last_slash - dsa->strings[i] + strlen("hist.dat") + 3 + 1, sizeof(char));
+
+						snprintf(hist_fn, (strlen("hist.dat") + 3), "hist%d.dat", j);
+						//fprintf(stdout, "Filename: %s\n", fn);
+
+						strncpy(path_hist_file, dsa->strings[i], last_slash - dsa->strings[i] + 1);
+						strncat(path_hist_file, hist_fn, strlen(hist_fn));
+						
+						free(hist_fn);
+						
+						f = fopen(path_hist_file, "a+");
+						for(k = 0; k < hist[j].info.size; ++k)
+							fprintf(f, "%d %d\n", hist[j].data[k].val, hist[j].data[k].count);
+						fclose(f);
+
+						//fns[j] = path_hist_file;
+						free(path_hist_file);
+					}
+
+					/*
+					for(j = 0; j < NUM_LP_COEFFS; ++j)
+						if(fns[j] != NULL)
+							free(fns[j]);
+					free(fns);
+					*/
+
+					free_coeffs(coeffs, num_line);
+					free_histogram(hist, num_coeffs);
+					fprintf(stdout, "Histogram data is written.\n");
+
+					pids_children[i] = 0;
+				}
+				else {
+					//fprintf(stdout, "Still waiting on example child process %d by now!\n", pids_children[i]);
+					waiting_for_children = 1;
+				}
+			}
+		}
+
+		sleep(0);
+	}while(waiting_for_children != 0);
 
 	return 0;
 }
 
-/**
- * Parses a whole line of comma separated coefficients into the coeff_line structure.
- *
- * Takes the file pointer as argument.
- *
- * Returns the pointer to the allocated coeff_line structure the coefficients were stored in.
- */
-struct coeff_line *parse_coeff_line(FILE *f) {
-	if(f == NULL || feof(f))
-		return NULL;
+char *dynamic_string_array_insert(struct dynamic_string_array *dsa, int string_size) {
+	if(dsa->count >= dsa->allocated) {
+		dsa->allocated *= 2;
+		dsa->strings = realloc(dsa->strings, dsa->allocated * sizeof(char *));
+	}
+		
+	char *string = calloc(string_size, sizeof(char) + 1);
+	dsa->strings[dsa->count++] = string;
 
-	// allocate a single coeff_line memory block
-	struct coeff_line *ret = calloc(1, sizeof(struct coeff_line));
+	return string;
+}
 
-	// holds the current character
-	char current = fgetc(f);
-	int pos = 0, num = 0, factor = 1;
+void cleanup(pid_t *pids_children, struct dynamic_string_array *dsa) {
+	if(pids_children != NULL)
+		free(pids_children);
 
-	while(!feof(f)) {
-		// check for errors
-		if(ferror(f)) {
-			free(ret);
-			fprintf(stderr, "Error while reading file.\n");
-			return NULL;
-		}
+	int i = 0;
+	for(i = 0; i < dsa->count; ++i)
+		if(dsa->strings[i] != NULL)
+			free(dsa->strings[i]);
+	
+	if(dsa->strings != NULL)
+		free(dsa->strings);
+	if(dsa != NULL)
+		free(dsa);
+}
 
-		// read a single entry (entries are comma separated)
-		num = current - 48;
-		factor = 1;
-		while(!feof(f)) {
-			// consider negative sign
-			if(current == '-') {
-				factor = (-1);
-				current = fgetc(f);
-				num = current - 48;
-			}
+void list_directory(struct dynamic_string_array *dsa, const char *directory_name) {
+	DIR *directory = NULL;
+	struct dirent *entry = NULL;
 
-			current = fgetc(f);
-			if((current == ',') || (current == '\n'))
-				break;
+	// open directory
+	directory = opendir(directory_name);
 
-			num = num * 10 + (current - 48);
-		}
-		num *= factor;
+	// check success
+	if(directory == NULL) {
+		fprintf(stderr, "Could not open directory ./files/\n");
+		exit(-1);
+	}
 
-		// store coefficient into correct part of the coeff_line structure
-		if(pos >= 0 && pos <= 1)
-			*(ret->tile_info + pos) = num;
-		else if(pos >= 2 && pos <= 3)
-			*(ret->mb_info + pos - 2) = num;
-		else if(pos == 4)
-			*(ret->dc_coeff + pos - 4) = num;
-		else if(pos >= 5 && pos <= 19)
-			*(ret->lp_coeff + pos - 5) = num;
-		else
-			*(ret->hp_coeff + pos - 20) = num;
+	while(1) {
+		// read directory
+		entry = readdir(directory);
 
-		if(current == '\n')
+		// check success
+		if(entry == NULL)
 			break;
 
-		current = fgetc(f);
-		++pos;
-	}
+		if(	(strcmp(entry->d_name, "..") != 0)
+			&& (strcmp(entry->d_name, ".") != 0))
+		{
+			int path_length = strlen(directory_name) + strlen(entry->d_name) + 2; // +2 because of the / and the \0
+			char *path = calloc(path_length, sizeof(char));
 
-	return ret;
-}
-
-void free_coeffs(struct coeff_line **coeffs, int num_line) {
-	if(coeffs == NULL)
-		exit(-1);
-
-	int i = 0;
-	for(i = 0; i <= num_line; ++i) {
-		if(coeffs[i] == NULL)
-			exit(-1);
-		
-		free(coeffs[i]);
-	}
-	free(coeffs);
-}
-
-void update_min_max(int *current, int *min, int *max) {
-	if(current == NULL || min == NULL || max == NULL)
-		exit(-1);
-
-	if(*current > *max) {
-		*max = *current;
-		return;
-	}
-	else if(*current < *min) {
-		*min = *current;
-	}
-}
-
-struct histogram *init_histogram(int num_coeffs, int num_values) {
-	struct histogram *hist = calloc(num_coeffs, sizeof(struct histogram));
-
-	if(hist == NULL)
-		return NULL;
-
-	int i = 0;
-	for(i = 0; i < num_coeffs; ++i) {
-		hist[i].info.size = num_values;
-		hist[i].info.pos = 0;
-
-		hist[i].data = calloc(hist->info.size, sizeof(struct hist_data));
-
-		if(hist[i].data == NULL)
-			return NULL;
-
-		hist[i].data->val = 0;
-		hist[i].data->count = 0;
-	}
-
-	return hist;
-}
-
-void free_histogram(struct histogram *hist, int num_coeffs) {
-	if(hist == NULL)
-		return;
-
-	int i = 0;
-	for(i = 0; i < num_coeffs; ++i)
-		free(hist[i].data);
-
-	free(hist);
-}
-
-void insert_hist_data(struct histogram *hist, int *idx_coeff, int *val) {
-	if(hist == NULL || idx_coeff == NULL || val == NULL) {
-		fprintf(stderr, "Error in insert_hist_data.\n");
-		exit(-1);
-	}
-
-	if(*idx_coeff > NUM_LP_COEFFS) {
-		fprintf(stderr, "Error in insert_hist_data: num_coeff too big (%d).\n", *idx_coeff);
-		exit(-1);
-	}
-
-	int pos = search_hist_data(hist, idx_coeff, val);
-	
-	//if(*idx_coeff == 0)
-	//	fprintf(stdout, "*val == %d && pos == %d\n", *val, pos);
-
-	if(pos < 0) {
-		if((hist[*idx_coeff].info.size - 1) <= hist[*idx_coeff].info.pos) {
-			hist[*idx_coeff].info.size *= 2;
-			hist[*idx_coeff].data = realloc(hist[*idx_coeff].data, hist[*idx_coeff].info.size * sizeof(struct hist_data));
-
-			if(hist[*idx_coeff].data == NULL) {
-				fprintf(stderr, "Error while reallocing histogram data to size %d.\n", hist[*idx_coeff].info.pos);
+			path_length = snprintf(path, path_length, "%s/%s", directory_name, entry->d_name);
+			if(path_length >= PATH_MAX) {
+				fprintf(stderr, "Path length exceeded!\n");
 				exit(-1);
 			}
 
-			int i = 0;
-			for(i = (hist[*idx_coeff].info.pos + 1); i < hist[*idx_coeff].info.size; ++i) {
-				hist[*idx_coeff].data[i].val = 0;
-				hist[*idx_coeff].data[i].count = 0;
+			// entry is directory
+			if(entry->d_type & DT_DIR) {
+				list_directory(dsa, path);
+			} else { // entry is no directory
+				char *entry = dynamic_string_array_insert(dsa, path_length + 1);
+				memcpy(entry, path, path_length + 1);
 			}
+			free(path);
 		}
-		
-		hist[*idx_coeff].data[hist[*idx_coeff].info.pos].val = *val;
-		hist[*idx_coeff].data[hist[*idx_coeff].info.pos].count = 1;
-		++(hist[*idx_coeff].info.pos);
-	} else {
-		++(hist[*idx_coeff].data[pos].count);
 	}
-}
 
-
-int search_hist_data(struct histogram *hist, int *idx_coeff, int *val) {
-	if(hist == NULL || idx_coeff == NULL || val == NULL) {
-		fprintf(stderr, "Error in search_hist_data.\n");
+	if(closedir(directory)) {
+		fprintf(stderr, "Could not close %s\n", directory_name);
 		exit(-1);
 	}
-
-	int i = 0;
-	for(i = 0; i <= hist[*idx_coeff].info.pos; ++i) {
-		//if(*idx_coeff == 0)
-		//	fprintf(stdout, "hist[%d].data[%d].count = %d, .val = %d\n", *idx_coeff, i, hist[*idx_coeff].data[i].count, hist[*idx_coeff].data[i].val);
-
-		if(hist[*idx_coeff].data[i].count > 0 && hist[*idx_coeff].data[i].val == *val)
-			return i;
-	}
-
-	return -1;
-}
-
-int compare(const void *p, const void *q) {
-	struct hist_data *sp = ((struct hist_data *)p);
-	struct hist_data *sq = ((struct hist_data *)q);
-
-	return (sp->val > sq->val);
 }
