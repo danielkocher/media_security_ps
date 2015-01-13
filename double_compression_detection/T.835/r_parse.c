@@ -78,6 +78,53 @@
 # include <memory.h>
 # include <assert.h>
 
+/** ADDED MS_PS */
+// see file.c
+typedef struct context{
+    const char *name; /* name of TIFF or PNM file */
+    int wid; /* image width in pixels */
+    int hei; /* image height in pixels */
+    int ncomp; /* num of color channels, 1, 3, or 4 */
+    int component_count; /* number of components in the codestream */
+    int bpi; /* bits per component, 1..16 */
+    int ycc_format; /* ycc format, 0 (Not Applicable), 1 (YUV420), 2 (YUV422), 3 (YUV444)*/
+    short sf; /* sample format, 1 (UINT), 2 (FixedPoint), 3 (float) or 4 (RGBE)*/
+    int format; /* component format code 0..15 */
+    unsigned swap : 1; /* byte swapping required ? */
+    FILE *file; /* input or output file pointer */
+    void *buf; /* source or destination data buffer */
+    int my; /* last MB strip (of 16 lines) read, init to -1 */
+    int nstrips; /* num of TIFF strips, 0 for PNM */
+    int strip; /* index of the current TIFF strip, 0 for PNM */
+    int nlines; /* num of lines per TIFF strip, height for PNM */
+    int line; /* index of current line in current strip */
+    short photometric; /* PhotometricInterpretation:
+                            WhiteIsZero 0
+                            BlackIsZero 1
+                            RGB 2
+                            RGB Palette 3
+                            Transparency mask 4
+                            CMYK 5
+                            YCbCr 6
+                            CIELab 8
+                       */
+    uint32_t      offoff; /* offset in TIFF file of StripOffsets ifd entry*/
+    int           padBytes;
+    int           alpha;         /* with alpha channel */
+    int           premultiplied; /* alpha channel is premultiplied */
+    unsigned int  isBgr;
+    unsigned int  packBits; /* required for TIFF output: Bits are packed tightly */
+    unsigned char bitBuffer;
+    unsigned int  bitPos;
+    unsigned int  padded_format; /* set if the padding channel should be written */
+    int top_pad;
+    int top_pad_remaining;
+    int left_pad;
+    int cmyk_format; /* set for CYMK-type formats */
+    int separate;   /* set if planes are separately encoded */
+}context;
+/****************/
+
 static int r_image_header(jxr_image_t image, struct rbitstream*str);
 static int r_image_plane_header(jxr_image_t image, struct rbitstream*str, int alpha);
 static int r_INDEX_TABLE(jxr_image_t image, struct rbitstream*str);
@@ -1995,7 +2042,18 @@ int _jxr_r_MB_HP(jxr_image_t image, struct rbitstream*str,
         MACROBLK_CUR_HP(image, 0, tx, mx, idx, idx2) = 10;
     */
 
-    FILE *f = fopen("coeffs.csv", "a+");
+    void *user_data = image->user_data;
+    context *con = (context *)user_data;
+    char *output_file = con->name;
+    char *last_slash = strrchr(output_file, '/');
+    const char *coeffs_fn = "coeffs.csv";
+    char *coeffs_path = calloc(last_slash - output_file + strlen(coeffs_fn) + 2, sizeof(char));
+    
+    strncpy(coeffs_path, output_file, last_slash - output_file + 1);
+    strncat(coeffs_path, coeffs_fn, strlen(coeffs_fn));
+    //fprintf(stdout, "coeffs_path = %s\n", coeffs_path);
+
+    FILE *f = fopen(coeffs_path, "a+");
     if(f != NULL) {
     	fprintf(f, "%d,%d,%d,%d,%d,", tx, ty, mx, my, (int)MACROBLK_CUR_DC(image, 0, tx, mx));
     
@@ -2015,6 +2073,7 @@ int _jxr_r_MB_HP(jxr_image_t image, struct rbitstream*str,
     }
 
     fclose(f);
+    free(coeffs_path);
     
     return 0;
 }
