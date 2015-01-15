@@ -250,7 +250,9 @@ void list_directory(struct dynamic_string_array *dsa, const char *directory_name
 			break;
 
 		if(	(strcmp(entry->d_name, "..") != 0)
-			&& (strcmp(entry->d_name, ".") != 0))
+			&& (strcmp(entry->d_name, ".") != 0)
+			&& (strcmp(entry->d_name, "generate_histograms.sh") != 0)
+			&& (strcmp(entry->d_name, "hist.gnu") != 0))
 		{
 			int path_length = strlen(directory_name) + strlen(entry->d_name) + 2; // +2 because of the / and the \0
 			char *path = calloc(path_length, sizeof(char));
