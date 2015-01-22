@@ -15,5 +15,9 @@
 ## Coding guidelines
 * All modifications to the T.835 reference implementation are documented by a comment starting with '*ADDED MS_PS*'
 
+## Requirements
+* A unixoide operating system (currently only tested on Linux machines)
+* `gnuplot` has to be installed
+
 ## Usage
 * Execute `exec.sh` in the /double_compression_detection folder (e.g. issuing `sh exec.sh`). This may take some time because this command triggers the decoding of all test_images, the extraction of the coefficients of all decoded images and the drawing of the corresponding histogram for each coefficient.
