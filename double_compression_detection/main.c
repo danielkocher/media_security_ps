@@ -160,8 +160,7 @@ int main(int argc, char** argv) {
 						//fprintf(stdout, "Filename: %s\n", fn);
 
 						strncpy(path_hist_file, dsa->strings[i], last_slash - dsa->strings[i] + 1);
-						strncat(path_hist_file, hist_fn, strlen(hist_fn));
-						
+						strncat(path_hist_file, hist_fn, strlen(hist_fn));						
 						free(hist_fn);
 						
 						f = fopen(path_hist_file, "a+");
