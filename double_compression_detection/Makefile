@@ -4,7 +4,7 @@ CFLAGS		= -g -Wall -O3
 LIB_DIR		= T.835
 
 COEFF_FILE	= coeffs.csv
-OBJECTS		= main.o histogram.o coeffio.o
+OBJECTS		= main.o histogram.o coefficients_io.o dynamic_string_array.o
 PROGRAMS	= main
 
 default: subdefault $(PROGRAMS)
@@ -13,8 +13,8 @@ all: subdefault $(PROGRAMS)
 
 debug: subdebug $(PROGRAMS)
 
-main.o: main.c histogram.c coeffio.c
-	$(CC) $(CFLAGS) -c main.c histogram.c coeffio.c
+main.o: main.c histogram.c coefficients_io.c dynamic_string_array.c
+	$(CC) $(CFLAGS) -c main.c histogram.c coefficients_io.c dynamic_string_array.c
 
 main: $(OBJECTS)
 	$(CC) -o $@ $^
