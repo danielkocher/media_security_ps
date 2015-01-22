@@ -13,7 +13,7 @@
   * contains the test images (original as well as single- and double-compressed JPEG-XR format)
 
 ## Coding guidelines
-* All modifications to the T.835 reference implementation are documented by a comment starting with 'ADDED MS_PS'
+* All modifications to the T.835 reference implementation are documented by a comment starting with '*ADDED MS_PS*'
 
 ## Usage
 * Execute `exec.sh` in the /double_compression_detection folder (e.g. issuing `sh exec.sh`)
