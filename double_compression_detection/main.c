@@ -10,18 +10,19 @@
 #include <dirent.h>
 
 #include "histogram.h"
-#include "coeffio.h"
-
-struct dynamic_string_array {
-	int allocated;
-	int count;
-	char **strings;
-};
+#include "coefficients_io.h"
+#include "dynamic_string_array.h"
 
 void list_directory(struct dynamic_string_array *dsa, const char *directory_name);
 void cleanup(pid_t *pids_children, struct dynamic_string_array *dsa);
 
 int main(int argc, char** argv) {
+	if(argc < 2) {
+		fprintf(stderr, "USAGE: ./main <path to test images>");
+		return -1;
+	}
+
+	char *path_test_images = argv[1];
 	struct dynamic_string_array *dsa = calloc(1, sizeof(struct dynamic_string_array));
 	int i = 0, j = 0, k = 0;
 
@@ -29,7 +30,7 @@ int main(int argc, char** argv) {
 	dsa->count = 0;
 	dsa->strings = calloc(dsa->allocated, sizeof(char *));
 
-	list_directory(dsa, "./test_images");
+	list_directory(dsa, path_test_images);
 
 	int num_of_children = dsa->count;
 	fprintf(stdout, "Creating %d example child processes.\n", num_of_children);
@@ -39,21 +40,11 @@ int main(int argc, char** argv) {
 	pids_children = calloc(num_of_children, sizeof(pid_t));
 	if(pids_children == NULL) {
 		fprintf(stderr, "An error occurred while allocating %d PIDs!\n", num_of_children);
-
-		for(i = 0; i < dsa->count; ++i)
-			if(dsa->strings[i] != NULL)
-				free(dsa->strings[i]);
-		
-		if(dsa->strings != NULL)
-			free(dsa->strings);
-		if(dsa != NULL)
-			free(dsa);
-
+		cleanup(pids_children, dsa);
 		return (-1);
 	}
 
 	char *fn_tif = NULL;
-	i = 0;
 	for(i = 0; i < num_of_children; ++i) {
 		if((pid_child = fork()) == 0) {
 			fn_tif = calloc(1, strlen(dsa->strings[i]) + 1);
@@ -97,7 +88,7 @@ int main(int argc, char** argv) {
 					FILE *f = fopen(path_coeff_file, "r");
 
 					int coeffs_size = 100;
-					struct coeff_line **coeffs = calloc(coeffs_size, sizeof(struct coeff_line *));
+					struct coefficients_line **coeffs = calloc(coeffs_size, sizeof(struct coefficients_line *));
 					int num_line = 0;
 
 					if(f == NULL) {
@@ -110,12 +101,11 @@ int main(int argc, char** argv) {
 						// check for size of array and allocate more if necessary
 						if(num_line >= (coeffs_size - 1)) {
 							coeffs_size *= 2;
-							coeffs = realloc(coeffs, coeffs_size * sizeof(struct coeff_line *));
+							coeffs = realloc(coeffs, coeffs_size * sizeof(struct coefficients_line *));
 						}
 
 						// parse a whole line of coefficients and store pointer
-						*(coeffs + num_line) = parse_coeff_line(f);
-
+						*(coeffs + num_line) = coefficients_parse_line(f);
 						++num_line;
 					}
 
@@ -123,7 +113,7 @@ int main(int argc, char** argv) {
 					if(num_line < coeffs_size) {
 						coeffs_size = num_line;
 						--num_line;
-						coeffs = realloc(coeffs, coeffs_size * sizeof(struct coeff_line *));
+						coeffs = realloc(coeffs, coeffs_size * sizeof(struct coefficients_line *));
 					}
 
 					// close file if it was opened
@@ -131,17 +121,25 @@ int main(int argc, char** argv) {
 						fclose(f);
 
 					// number of coefficients
-					int num_coeffs = NUM_LP_COEFFS;
+					int num_coeffs = NUM_DC_COEFFICIENTS + NUM_LP_COEFFICIENTS; // + NUM_HP_COEFFICIENTS;
+					int dc_max_idx = NUM_DC_COEFFICIENTS;
+					int lp_max_idx = dc_max_idx + NUM_LP_COEFFICIENTS;
+					int hp_max_idx = lp_max_idx + NUM_HP_COEFFICIENTS;
 					// at least one value present
 					int num_values = 1;		
-					struct histogram *hist = init_histogram(num_coeffs, num_values);
+					struct histogram *hist = histogram_init(num_coeffs, num_values);
 
-					for(j = 0; j < num_line; ++j)
-						for(k = 0; k < NUM_LP_COEFFS; ++k)
-							insert_hist_data(hist, &k, NUM_LP_COEFFS, &coeffs[j]->lp_coeff[k]);
+					for(j = 0; j < num_line; ++j) {
+						for(k = 0; k < dc_max_idx; ++k)
+							histogram_insert_data(hist, &k, dc_max_idx, &coeffs[j]->dc_coefficients[k]);
+						for(k = dc_max_idx; k < lp_max_idx; ++k)
+							histogram_insert_data(hist, &k, lp_max_idx, &coeffs[j]->lp_coefficients[k - dc_max_idx]);
+						//for(k = lp_max_idx; k < hp_max_idx; ++k)
+						//	histogram_insert_data(hist, &k, hp_max_idx, &coeffs[j]->hp_coefficients[k - lp_max_idx]);
+					}
 
 					// resize to minimum size
-					for(j = 0; j < NUM_LP_COEFFS; ++j) {
+					for(j = 0; j < num_coeffs; ++j) {
 						if(hist[j].info.pos < hist[j].info.size) {
 							hist[j].info.size = hist[j].info.pos;
 							--hist[j].info.pos;
@@ -150,11 +148,11 @@ int main(int argc, char** argv) {
 					}
 
 					// sort coefficients
-					for(j = 0; j < NUM_LP_COEFFS; ++j)
-						qsort(hist[j].data, hist[j].info.size, sizeof(struct hist_data), compare_hist);
+					for(j = 0; j < num_coeffs; ++j)
+						qsort(hist[j].data, hist[j].info.size, sizeof(struct histogram_data), histogram_compare);
 
 					//char **fns = calloc(NUM_LP_COEFFS, sizeof(char *));
-					for(j = 0; j < NUM_LP_COEFFS; ++j) {
+					for(j = 0; j < num_coeffs; ++j) {
 						char *hist_fn = calloc(strlen("hist.dat") + 3 + 4, sizeof(char));
 						char *path_hist_file = calloc(last_slash - dsa->strings[i] + strlen("hist.dat") + 3 + 1, sizeof(char));
 
@@ -171,19 +169,11 @@ int main(int argc, char** argv) {
 							fprintf(f, "%d %d\n", hist[j].data[k].val, hist[j].data[k].count);
 						fclose(f);
 
-						//fns[j] = path_hist_file;
 						free(path_hist_file);
 					}
 
-					/*
-					for(j = 0; j < NUM_LP_COEFFS; ++j)
-						if(fns[j] != NULL)
-							free(fns[j]);
-					free(fns);
-					*/
-
-					free_coeffs(coeffs, num_line);
-					free_histogram(hist, num_coeffs);
+					coefficients_free(coeffs, num_line);
+					histogram_free(hist, num_coeffs);
 					fprintf(stdout, "Histogram data is written.\n");
 
 					pids_children[i] = 0;
@@ -201,31 +191,11 @@ int main(int argc, char** argv) {
 	return 0;
 }
 
-char *dynamic_string_array_insert(struct dynamic_string_array *dsa, int string_size) {
-	if(dsa->count >= dsa->allocated) {
-		dsa->allocated *= 2;
-		dsa->strings = realloc(dsa->strings, dsa->allocated * sizeof(char *));
-	}
-		
-	char *string = calloc(string_size, sizeof(char) + 1);
-	dsa->strings[dsa->count++] = string;
-
-	return string;
-}
-
 void cleanup(pid_t *pids_children, struct dynamic_string_array *dsa) {
 	if(pids_children != NULL)
 		free(pids_children);
 
-	int i = 0;
-	for(i = 0; i < dsa->count; ++i)
-		if(dsa->strings[i] != NULL)
-			free(dsa->strings[i]);
-	
-	if(dsa->strings != NULL)
-		free(dsa->strings);
-	if(dsa != NULL)
-		free(dsa);
+	dynamic_string_array_free(dsa);
 }
 
 void list_directory(struct dynamic_string_array *dsa, const char *directory_name) {
