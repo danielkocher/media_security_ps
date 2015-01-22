@@ -1,4 +1,4 @@
-#include "coeffio.h"
+#include "coefficients_io.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,12 +10,12 @@
  *
  * Returns the pointer to the allocated coeff_line structure the coefficients were stored in.
  */
-struct coeff_line *parse_coeff_line(FILE *f) {
+struct coefficients_line *coefficients_parse_line(FILE *f) {
 	if(f == NULL || feof(f))
 		return NULL;
 
 	// allocate a single coeff_line memory block
-	struct coeff_line *ret = calloc(1, sizeof(struct coeff_line));
+	struct coefficients_line *ret = calloc(1, sizeof(struct coefficients_line));
 
 	// holds the current character
 	char current = fgetc(f);
@@ -52,13 +52,13 @@ struct coeff_line *parse_coeff_line(FILE *f) {
 		if(pos >= 0 && pos <= 1)
 			*(ret->tile_info + pos) = num;
 		else if(pos >= 2 && pos <= 3)
-			*(ret->mb_info + pos - 2) = num;
+			*(ret->macroblock_info + pos - 2) = num;
 		else if(pos == 4)
-			*(ret->dc_coeff + pos - 4) = num;
+			*(ret->dc_coefficients + pos - 4) = num;
 		else if(pos >= 5 && pos <= 19)
-			*(ret->lp_coeff + pos - 5) = num;
+			*(ret->lp_coefficients + pos - 5) = num;
 		else
-			*(ret->hp_coeff + pos - 20) = num;
+			*(ret->hp_coefficients + pos - 20) = num;
 
 		if(current == '\n')
 			break;
@@ -70,16 +70,15 @@ struct coeff_line *parse_coeff_line(FILE *f) {
 	return ret;
 }
 
-void free_coeffs(struct coeff_line **coeffs, int num_line) {
+void coefficients_free(struct coefficients_line **coeffs, int num_line) {
 	if(coeffs == NULL)
-		exit(-1);
+		return;
 
 	int i = 0;
 	for(i = 0; i <= num_line; ++i) {
-		if(coeffs[i] == NULL)
-			exit(-1);
-		
-		free(coeffs[i]);
+		if(coeffs[i] != NULL)
+			free(coeffs[i]);
 	}
+
 	free(coeffs);
 }
