@@ -16,4 +16,4 @@
 * All modifications to the T.835 reference implementation are documented by a comment starting with '*ADDED MS_PS*'
 
 ## Usage
-* Execute `exec.sh` in the /double_compression_detection folder (e.g. issuing `sh exec.sh`)
+* Execute `exec.sh` in the /double_compression_detection folder (e.g. issuing `sh exec.sh`). This may take some time because this command triggers the decoding of all test_images, the extraction of the coefficients of all decoded images and the drawing of the corresponding histogram for each coefficient.
