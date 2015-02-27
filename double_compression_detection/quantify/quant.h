@@ -2,10 +2,9 @@
 #define QUANT_H_
 
 #define NUM_HIST 16
-#define NUM_METHODS 3
+#define NUM_METHODS 4
 
-struct hist
-{
+struct hist {
 	int different_values;
 	int *value;
 	int *count;
