@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [ "$#" -le 0 ]
+then
+	echo "USAGE: sh generate.sh [<quantisation_factor1> [, <quantisation_factor2> [, ...]]]"
+fi
+
 FOLDER_BASE="extracted/standard_test_images"
 FOLDER_ORIGINAL="${FOLDER_BASE}/original/*.tif"
 FOLDER_DOUBLE_COMPRESSED="${FOLDER_BASE}/double_compressed"
