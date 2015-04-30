@@ -29,4 +29,5 @@
   * `make clean` - clean the whole project including all the JXR test images
 
 The savest way to fully build and run the project using the test images is to issue the following command(s):
+
 `make images && make run`
