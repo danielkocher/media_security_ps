@@ -28,6 +28,5 @@
   * `make run` - build the whole project and run it on the JXR test images located in the subdirectory `double_compression/test_images/extracted/compressed/` (you should first run `make images`)
   * `make clean` - clean the whole project including all the JXR test images
 
-The savest way to fully build and run the project using the test images is to issue the following command(s):
-
+The savest way to fully build and run the project using the test images is to issue the following command(s):  
 `make images && make run`
