@@ -19,5 +19,11 @@
 * A unixoide operating system (currently only tested on Linux machines)
 * `gnuplot` has to be installed
 
-## Usage
-* Execute `exec.sh` in the /double_compression_detection folder (e.g. by issuing `sh exec.sh`). This may take some time because this command triggers the decoding of all test_images, the extraction of the coefficients of all decoded images and the drawing of the corresponding histogram for each coefficient.
+## Usage (Tested under Linux Mint 17)
+* Open a UNIX shell
+* Navigate into the root directory of this project
+* Issue the following commands in the root directory of this project (in order or just the one you need)
+  * `make` - build the T.835 project and the double compression detection project
+  * `make images` - generate all the JXR test images (located in the subdirectory double_compression/test_images/extracted/compressed/)
+  * `make run` - build the whole project and run it on the JXR test images located in the subdirectory double_compression/test_images/extracted/compressed/ (`make images` should be run first)
+  * `make clean` - clean the whole project including all the JXR test images
