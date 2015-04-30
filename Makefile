@@ -1,17 +1,15 @@
-SRC_DIR = double_compression_detection
-TEST_DIR = test_images
+DCD_DIR = double_compression_detection
 
 all: clean dcd
 
 dcd:
-	$(MAKE) -C $(SRC_DIR)
+	$(MAKE) -C $(DCD_DIR)
 
-test_images: all
-	$(MAKE) -C $(TEST_DIR)
+images:
+	$(MAKE) -C $(DCD_DIR) images
 
 run:
-	$(MAKE) -C $(SRC_DIR) run
+	$(MAKE) -C $(DCD_DIR) run
 
 clean:
-	$(MAKE) -C $(SRC_DIR) clean
-	$(MAKE) -C $(TEST_DIR) clean
+	$(MAKE) -C $(DCD_DIR) clean
