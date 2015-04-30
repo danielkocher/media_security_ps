@@ -1,0 +1,7 @@
+Prerequisites:
+==============
+The exec.sh calls gnuplot using the hist.gnu file.
+The hist.gnu uses x11 from gnuplot.
+Hence, the following linux-packages have to be installed:
+	gnuplot
+	gnuplot-x11
