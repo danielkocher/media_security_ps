@@ -10,6 +10,8 @@ FOLDER_ORIGINAL="${FOLDER_BASE}/original/*.tif"
 FOLDER_COMPRESSED="${FOLDER_BASE}/compressed"
 PATH_JPEGXR="../T.835/jpegxr"
 
+mkdir "${FOLDER_COMPRESSED}"
+
 for f in $FOLDER_ORIGINAL
 do
 	for i in $@
