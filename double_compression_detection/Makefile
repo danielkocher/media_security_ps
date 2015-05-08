@@ -24,7 +24,7 @@ PROGRAMS	= main
 
 .PHONY: histograms quantifications clustering
 
-default: subdefault $(PROGRAMS) histograms quantifications clustering
+default: subdefault $(PROGRAMS)
 
 all: default
 
@@ -33,7 +33,7 @@ debug: subdebug $(PROGRAMS)
 images: all
 	$(MAKE) -C $(IMAGES_DIR)
 
-run: all
+coefficient_data: all
 	./$(PROGRAMS) $(IMAGES_DIR)/$(COMPR_DIR)
 
 histograms:
