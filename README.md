@@ -25,8 +25,16 @@
 * Issue the following commands in the root directory of this project (in order or just the one you need)
   * `make` - build the T.835 project and the double compression detection project
   * `make images` - generate all the JXR test images (located in the subdirectory `double_compression/test_images/extracted/compressed/`)
-  * `make run` - build the whole project and run it on the JXR test images located in the subdirectory `double_compression/test_images/extracted/compressed/` (you should first run `make images`)
+  * `make coefficient_data` -  extract the coefficient data for each JXR test image while decoding it
+  * `make histograms` - generate/plot the histograms for each coefficient for each JXR test image
+  * `make quantifications` - quantify the coefficient data for each JXR test image
+  * `make clustering` - cluster the quantification data for each JXR test image by coefficient, quantification method and first compression factor
   * `make clean` - clean the whole project including all the JXR test images
 
-The savest way to fully build and run the project using the test images is to issue the following command(s):  
-`make images && make run`
+The savest way to fully build and run the project using the test images is to issue the following command(s) in this order in the root directory of the project:  
+`cd double_compression_detection`  
+`make clean`  
+`make images`  
+`make coefficient_data`  
+`make quantifications`  
+`make clustering`
