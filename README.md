@@ -32,9 +32,9 @@
   * `make clean` - clean the whole project including all the JXR test images
 
 The savest way to fully build and run the project using the test images is to issue the following command(s) in this order in the root directory of the project:  
-`cd double_compression_detection`  
-`make clean`  
-`make images`  
-`make coefficient_data`  
-`make quantifications`  
-`make clustering`
+  1. `cd double_compression_detection`  
+  2. `make clean`  
+  3. `make images`  
+  4. `make coefficient_data`  
+  5. `make quantifications`  
+  6. `make clustering`
