@@ -16,7 +16,7 @@
 * All modifications to the T.835 reference implementation are documented by a comment starting with '*ADDED MS_PS*'
 
 ## Requirements
-* A unixoide operating system (currently only tested on Linux machines)
+* Unixoide operating system (currently only tested on Linux machines)
 * `bison`, `flex`, `gnuplot` and `gnuplot-x11` have to be installed
 
 ## Usage (Tested under Linux Mint 17)
